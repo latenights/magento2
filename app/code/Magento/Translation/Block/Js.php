@@ -9,6 +9,10 @@ namespace Magento\Translation\Block;
 use Magento\Framework\View\Element\Template;
 use Magento\Translation\Model\Js\Config;
 
+/**
+ * @api
+ * @since 100.0.2
+ */
 class Js extends Template
 {
     /**

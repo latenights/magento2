@@ -11,8 +11,9 @@ use Magento\Framework\App\Filesystem\DirectoryList;
 
 /**
  * Helper to move images from tmp to catalog directory
- *
+ * @api
  * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @since 100.0.2
  */
 class Media extends \Magento\Framework\App\Helper\AbstractHelper
 {
@@ -65,6 +66,11 @@ class Media extends \Magento\Framework\App\Helper\AbstractHelper
      * @var array
      */
     protected $swatchImageTypes = ['swatch_image', 'swatch_thumb'];
+
+    /**
+     * @var \Magento\Theme\Model\ResourceModel\Theme\Collection
+     */
+    private $registeredThemesCache;
 
     /**
      * @param \Magento\Catalog\Model\Product\Media\Config $mediaConfig
@@ -201,7 +207,7 @@ class Media extends \Magento\Framework\App\Helper\AbstractHelper
         if ($isSwatch) {
             $image->keepFrame(true);
             $image->keepTransparency(true);
-            $image->backgroundColor('#FFF');
+            $image->backgroundColor([255, 255, 255]);
         }
         return $this;
     }
@@ -247,7 +253,7 @@ class Media extends \Magento\Framework\App\Helper\AbstractHelper
     public function getImageConfig()
     {
         $imageConfig = [];
-        foreach ($this->themeCollection->loadRegisteredThemes() as $theme) {
+        foreach ($this->getRegisteredThemes() as $theme) {
             $config = $this->viewConfig->getViewConfig([
                 'area' => Area::AREA_FRONTEND,
                 'themeModel' => $theme,
@@ -327,5 +333,17 @@ class Media extends \Magento\Framework\App\Helper\AbstractHelper
     protected function prepareFile($file)
     {
         return ltrim(str_replace('\\', '/', $file), '/');
+    }
+
+    /**
+     * @return \Magento\Theme\Model\ResourceModel\Theme\Collection
+     */
+    private function getRegisteredThemes()
+    {
+        if ($this->registeredThemesCache === null) {
+            $this->registeredThemesCache = $this->themeCollection->loadRegisteredThemes();
+        }
+
+        return $this->registeredThemesCache;
     }
 }

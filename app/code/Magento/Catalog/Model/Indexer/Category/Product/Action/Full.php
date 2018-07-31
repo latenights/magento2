@@ -5,8 +5,10 @@
  */
 namespace Magento\Catalog\Model\Indexer\Category\Product\Action;
 
+use Magento\Catalog\Model\ResourceModel\Indexer\ActiveTableSwitcher;
 use Magento\Framework\DB\Query\Generator as QueryGenerator;
 use Magento\Framework\App\ResourceConnection;
+use Magento\Indexer\Model\ProcessManager;
 
 /**
  * Class Full reindex action
@@ -27,11 +29,6 @@ class Full extends \Magento\Catalog\Model\Indexer\Category\Product\AbstractActio
     private $batchProvider;
 
     /**
-     * @var \Magento\Indexer\Model\Indexer\StateFactory
-     */
-    private $indexerStateFactory;
-
-    /**
      * @var \Magento\Framework\EntityManager\MetadataPool
      */
     protected $metadataPool;
@@ -44,6 +41,16 @@ class Full extends \Magento\Catalog\Model\Indexer\Category\Product\AbstractActio
     private $batchRowsCount;
 
     /**
+     * @var ActiveTableSwitcher
+     */
+    private $activeTableSwitcher;
+
+    /**
+     * @var ProcessManager
+     */
+    private $processManager;
+
+    /**
      * @param ResourceConnection $resource
      * @param \Magento\Store\Model\StoreManagerInterface $storeManager
      * @param \Magento\Catalog\Model\Config $config
@@ -51,8 +58,10 @@ class Full extends \Magento\Catalog\Model\Indexer\Category\Product\AbstractActio
      * @param \Magento\Framework\Indexer\BatchSizeManagementInterface|null $batchSizeManagement
      * @param \Magento\Framework\Indexer\BatchProviderInterface|null $batchProvider
      * @param \Magento\Framework\EntityManager\MetadataPool|null $metadataPool
-     * @param \Magento\Indexer\Model\Indexer\StateFactory|null $stateFactory
      * @param int|null $batchRowsCount
+     * @param ActiveTableSwitcher|null $activeTableSwitcher
+     * @param ProcessManager $processManager
+     * @SuppressWarnings(PHPMD.ExcessiveParameterList)
      */
     public function __construct(
         \Magento\Framework\App\ResourceConnection $resource,
@@ -62,8 +71,9 @@ class Full extends \Magento\Catalog\Model\Indexer\Category\Product\AbstractActio
         \Magento\Framework\Indexer\BatchSizeManagementInterface $batchSizeManagement = null,
         \Magento\Framework\Indexer\BatchProviderInterface $batchProvider = null,
         \Magento\Framework\EntityManager\MetadataPool $metadataPool = null,
-        \Magento\Indexer\Model\Indexer\StateFactory $stateFactory = null,
-        $batchRowsCount = null
+        $batchRowsCount = null,
+        ActiveTableSwitcher $activeTableSwitcher = null,
+        ProcessManager $processManager = null
     ) {
         parent::__construct(
             $resource,
@@ -81,10 +91,41 @@ class Full extends \Magento\Catalog\Model\Indexer\Category\Product\AbstractActio
         $this->metadataPool = $metadataPool ?: $objectManager->get(
             \Magento\Framework\EntityManager\MetadataPool::class
         );
-        $this->indexerStateFactory = $stateFactory ?: $objectManager->get(
-            \Magento\Indexer\Model\Indexer\StateFactory::class
-        );
         $this->batchRowsCount = $batchRowsCount;
+        $this->activeTableSwitcher = $activeTableSwitcher ?: $objectManager->get(ActiveTableSwitcher::class);
+        $this->processManager = $processManager ?: $objectManager->get(ProcessManager::class);
+    }
+
+    /**
+     * @return void
+     */
+    private function createTables()
+    {
+        foreach ($this->storeManager->getStores() as $store) {
+            $this->tableMaintainer->createTablesForStore($store->getId());
+        }
+    }
+
+    /**
+     * @return void
+     */
+    private function clearReplicaTables()
+    {
+        foreach ($this->storeManager->getStores() as $store) {
+            $this->connection->truncateTable($this->tableMaintainer->getMainReplicaTable($store->getId()));
+        }
+    }
+
+    /**
+     * @return void
+     */
+    private function switchTables()
+    {
+        $tablesToSwitch = [];
+        foreach ($this->storeManager->getStores() as $store) {
+            $tablesToSwitch[] = $this->tableMaintainer->getMainTable($store->getId());
+        }
+        $this->activeTableSwitcher->switchTable($this->connection, $tablesToSwitch);
     }
 
     /**
@@ -94,76 +135,67 @@ class Full extends \Magento\Catalog\Model\Indexer\Category\Product\AbstractActio
      */
     public function execute()
     {
+        $this->createTables();
+        $this->clearReplicaTables();
         $this->reindex();
-
+        $this->switchTables();
         return $this;
     }
 
     /**
-     * Return select for remove unnecessary data
-     *
-     * @return \Magento\Framework\DB\Select
-     */
-    protected function getSelectUnnecessaryData()
-    {
-        return $this->connection->select()->from(
-            $this->getMainTable(),
-            []
-        )->joinLeft(
-            ['t' => $this->getMainTable()],
-            $this->getMainTable() .
-            '.category_id = t.category_id AND ' .
-            $this->getMainTable() .
-            '.store_id = t.store_id AND ' .
-            $this->getMainTable() .
-            '.product_id = t.product_id',
-            []
-        )->where(
-            't.category_id IS NULL'
-        );
-    }
-
-    /**
-     * Remove unnecessary data
+     * Run reindexation
      *
      * @return void
      */
-    protected function removeUnnecessaryData()
+    protected function reindex()
     {
-        $this->connection->query(
-            $this->connection->deleteFromSelect($this->getSelectUnnecessaryData(), $this->getMainTable())
-        );
+        $userFunctions = [];
+
+        foreach ($this->storeManager->getStores() as $store) {
+            if ($this->getPathFromCategoryId($store->getRootCategoryId())) {
+                $userFunctions[$store->getId()] = function () use ($store) {
+                    return $this->reindexStore($store);
+                };
+            }
+        }
+
+        $this->processManager->execute($userFunctions);
     }
 
     /**
-     * Publish data from tmp to index
+     * Execute indexation by store
      *
+     * @param \Magento\Store\Model\Store $store
+     */
+    private function reindexStore($store)
+    {
+        $this->reindexRootCategory($store);
+        $this->reindexAnchorCategories($store);
+        $this->reindexNonAnchorCategories($store);
+    }
+
+    /**
+     * Publish data from tmp to replica table
+     *
+     * @param \Magento\Store\Model\Store $store
      * @return void
      */
-    protected function publishData()
+    private function publishData($store)
     {
-        $select = $this->connection->select()->from($this->getMainTmpTable());
-
-        $columns = array_keys($this->connection->describeTable($this->getMainTable()));
+        $select = $this->connection->select()->from($this->tableMaintainer->getMainTmpTable($store->getId()));
+        $columns = array_keys(
+            $this->connection->describeTable($this->tableMaintainer->getMainReplicaTable($store->getId()))
+        );
+        $tableName = $this->tableMaintainer->getMainReplicaTable($store->getId());
 
         $this->connection->query(
             $this->connection->insertFromSelect(
                 $select,
-                $this->getMainTable(),
+                $tableName,
                 $columns,
                 \Magento\Framework\DB\Adapter\AdapterInterface::INSERT_ON_DUPLICATE
             )
         );
-    }
-
-    /**
-     * Clear all index data
-     *
-     * @return void
-     */
-    protected function clearTmpData()
-    {
-        $this->connection->delete($this->getMainTmpTable());
     }
 
     /**
@@ -172,7 +204,7 @@ class Full extends \Magento\Catalog\Model\Indexer\Category\Product\AbstractActio
     protected function reindexRootCategory(\Magento\Store\Model\Store $store)
     {
         if ($this->isIndexRootCategoryNeeded()) {
-            $this->reindexCategoriesBySelect($this->getAllProducts($store), 'cp.entity_id IN (?)');
+            $this->reindexCategoriesBySelect($this->getAllProducts($store), 'cp.entity_id IN (?)', $store);
         }
     }
 
@@ -184,7 +216,7 @@ class Full extends \Magento\Catalog\Model\Indexer\Category\Product\AbstractActio
      */
     protected function reindexAnchorCategories(\Magento\Store\Model\Store $store)
     {
-        $this->reindexCategoriesBySelect($this->getAnchorCategoriesSelect($store), 'ccp.product_id IN (?)');
+        $this->reindexCategoriesBySelect($this->getAnchorCategoriesSelect($store), 'ccp.product_id IN (?)', $store);
     }
 
     /**
@@ -195,7 +227,7 @@ class Full extends \Magento\Catalog\Model\Indexer\Category\Product\AbstractActio
      */
     protected function reindexNonAnchorCategories(\Magento\Store\Model\Store $store)
     {
-        $this->reindexCategoriesBySelect($this->getNonAnchorCategoriesSelect($store), 'ccp.product_id IN (?)');
+        $this->reindexCategoriesBySelect($this->getNonAnchorCategoriesSelect($store), 'ccp.product_id IN (?)', $store);
     }
 
     /**
@@ -203,12 +235,17 @@ class Full extends \Magento\Catalog\Model\Indexer\Category\Product\AbstractActio
      *
      * @param \Magento\Framework\DB\Select $basicSelect
      * @param string $whereCondition
+     * @param \Magento\Store\Model\Store $store
      * @return void
      */
-    private function reindexCategoriesBySelect(\Magento\Framework\DB\Select $basicSelect, $whereCondition)
+    private function reindexCategoriesBySelect(\Magento\Framework\DB\Select $basicSelect, $whereCondition, $store)
     {
+        $this->tableMaintainer->createMainTmpTable($store->getId());
+
         $entityMetadata = $this->metadataPool->getMetadata(\Magento\Catalog\Api\Data\ProductInterface::class);
-        $columns = array_keys($this->connection->describeTable($this->getMainTmpTable()));
+        $columns = array_keys(
+            $this->connection->describeTable($this->tableMaintainer->getMainTmpTable($store->getId()))
+        );
         $this->batchSizeManagement->ensureBatchSize($this->connection, $this->batchRowsCount);
         $batches = $this->batchProvider->getBatches(
             $this->connection,
@@ -217,7 +254,7 @@ class Full extends \Magento\Catalog\Model\Indexer\Category\Product\AbstractActio
             $this->batchRowsCount
         );
         foreach ($batches as $batch) {
-            $this->clearTmpData();
+            $this->connection->delete($this->tableMaintainer->getMainTmpTable($store->getId()));
             $resultSelect = clone $basicSelect;
             $select = $this->connection->select();
             $select->distinct(true);
@@ -227,33 +264,12 @@ class Full extends \Magento\Catalog\Model\Indexer\Category\Product\AbstractActio
             $this->connection->query(
                 $this->connection->insertFromSelect(
                     $resultSelect,
-                    $this->getMainTmpTable(),
+                    $this->tableMaintainer->getMainTmpTable($store->getId()),
                     $columns,
                     \Magento\Framework\DB\Adapter\AdapterInterface::INSERT_ON_DUPLICATE
                 )
             );
-            $this->publishData();
-            $this->removeUnnecessaryData();
+            $this->publishData($store);
         }
-    }
-
-    /**
-     * This overridden method returns ALTERNATIVE table name to work with.
-     *
-     * When the table used on frontend is 'catalog_category_product_index' this indexer should work
-     * with 'catalog_category_product_index_replica' and vice versa.
-     *
-     * @return string table name which is NOT used on frontend
-     */
-    protected function getMainTable()
-    {
-        $table = $this->getTable(self::MAIN_INDEX_TABLE);
-        $indexerState = $this->indexerStateFactory->create()->loadByIndexer(
-            \Magento\Catalog\Model\Indexer\Category\Product::INDEXER_ID
-        );
-        $destinationTableSuffix = ($indexerState->getTableSuffix() === '')
-            ? \Magento\Framework\Indexer\StateInterface::ADDITIONAL_TABLE_SUFFIX
-            : '';
-        return $table . $destinationTableSuffix;
     }
 }

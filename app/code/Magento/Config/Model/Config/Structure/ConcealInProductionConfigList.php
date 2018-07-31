@@ -10,6 +10,9 @@ use Magento\Framework\App\State;
 /**
  * Defines status of visibility of form elements on Stores > Settings > Configuration page
  * in Admin Panel in Production mode.
+ * @api
+ * @deprecated class location was changed
+ * @see \Magento\Config\Model\Config\Structure\ElementVisibility\ConcealInProduction
  */
 class ConcealInProductionConfigList implements ElementVisibilityInterface
 {
@@ -52,6 +55,7 @@ class ConcealInProductionConfigList implements ElementVisibilityInterface
 
     /**
      * @inheritdoc
+     * @deprecated
      */
     public function isHidden($path)
     {
@@ -63,6 +67,7 @@ class ConcealInProductionConfigList implements ElementVisibilityInterface
 
     /**
      * @inheritdoc
+     * @deprecated
      */
     public function isDisabled($path)
     {

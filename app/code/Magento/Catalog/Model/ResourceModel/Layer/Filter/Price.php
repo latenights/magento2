@@ -5,9 +5,21 @@
  */
 namespace Magento\Catalog\Model\ResourceModel\Layer\Filter;
 
+use Magento\Framework\App\Http\Context;
+use Magento\Framework\App\ObjectManager;
+use Magento\Framework\Indexer\DimensionFactory;
+use Magento\Framework\Search\Request\IndexScopeResolverInterface;
+use Magento\Store\Model\StoreManagerInterface;
+use Magento\Customer\Model\Context as CustomerContext;
+use Magento\Customer\Model\Indexer\CustomerGroupDimensionProvider;
+use Magento\Store\Model\Indexer\WebsiteDimensionProvider;
+
 /**
  * Catalog Layer Price Filter resource model
+ *
+ * @api
  * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @since 100.0.2
  */
 class Price extends \Magento\Framework\Model\ResourceModel\Db\AbstractDb
 {
@@ -39,9 +51,19 @@ class Price extends \Magento\Framework\Model\ResourceModel\Db\AbstractDb
     private $storeManager;
 
     /**
-     * @var \Magento\Indexer\Model\ResourceModel\FrontendResource
+     * @var IndexScopeResolverInterface|null
      */
-    private $indexerFrontendResource;
+    private $priceTableResolver;
+
+    /**
+     * @var Context
+     */
+    private $httpContext;
+
+    /**
+     * @var DimensionFactory|null
+     */
+    private $dimensionFactory;
 
     /**
      * @param \Magento\Framework\Model\ResourceModel\Db\Context $context
@@ -50,7 +72,9 @@ class Price extends \Magento\Framework\Model\ResourceModel\Db\AbstractDb
      * @param \Magento\Customer\Model\Session $session
      * @param \Magento\Store\Model\StoreManagerInterface $storeManager
      * @param null $connectionName
-     * @param \Magento\Indexer\Model\ResourceModel\FrontendResource|null $stateFactory
+     * @param IndexScopeResolverInterface|null $priceTableResolver
+     * @param Context|null $httpContext
+     * @param DimensionFactory|null $dimensionFactory
      */
     public function __construct(
         \Magento\Framework\Model\ResourceModel\Db\Context $context,
@@ -59,14 +83,18 @@ class Price extends \Magento\Framework\Model\ResourceModel\Db\AbstractDb
         \Magento\Customer\Model\Session $session,
         \Magento\Store\Model\StoreManagerInterface $storeManager,
         $connectionName = null,
-        \Magento\Indexer\Model\ResourceModel\FrontendResource $stateFactory = null
+        IndexScopeResolverInterface $priceTableResolver = null,
+        Context $httpContext = null,
+        DimensionFactory $dimensionFactory = null
     ) {
         $this->layer = $layerResolver->get();
         $this->session = $session;
         $this->storeManager = $storeManager;
         $this->_eventManager = $eventManager;
-        $this->indexerFrontendResource = $stateFactory ?: \Magento\Framework\App\ObjectManager::getInstance()
-            ->get(\Magento\Catalog\Model\ResourceModel\Product\Indexer\Price\FrontendResource::class);
+        $this->priceTableResolver = $priceTableResolver
+            ?? ObjectManager::getInstance()->get(IndexScopeResolverInterface::class);
+        $this->httpContext = $httpContext ?? ObjectManager::getInstance()->get(Context::class);
+        $this->dimensionFactory = $dimensionFactory ?? ObjectManager::getInstance()->get(DimensionFactory::class);
         parent::__construct($context, $connectionName);
     }
 
@@ -92,7 +120,7 @@ class Price extends \Magento\Framework\Model\ResourceModel\Db\AbstractDb
         $rangeExpr = new \Zend_Db_Expr("FLOOR(({$priceExpression}) / {$range}) + 1");
 
         $select->columns(['range' => $rangeExpr, 'count' => $countExpr]);
-        $select->group($rangeExpr)->order("({$rangeExpr}) ASC");
+        $select->group($rangeExpr)->order(new \Zend_Db_Expr("({$rangeExpr}) ASC"));
 
         return $this->getConnection()->fetchPairs($select);
     }
@@ -124,11 +152,8 @@ class Price extends \Magento\Framework\Model\ResourceModel\Db\AbstractDb
 
         // remove join with main table
         $fromPart = $select->getPart(\Magento\Framework\DB\Select::FROM);
-        if (!isset(
-            $fromPart[\Magento\Catalog\Model\ResourceModel\Product\Collection::INDEX_TABLE_ALIAS]
-        ) || !isset(
-            $fromPart[\Magento\Catalog\Model\ResourceModel\Product\Collection::MAIN_TABLE_ALIAS]
-        )
+        if (!isset($fromPart[\Magento\Catalog\Model\ResourceModel\Product\Collection::INDEX_TABLE_ALIAS]) ||
+            !isset($fromPart[\Magento\Catalog\Model\ResourceModel\Product\Collection::MAIN_TABLE_ALIAS])
         ) {
             return $select;
         }
@@ -383,6 +408,30 @@ class Price extends \Magento\Framework\Model\ResourceModel\Db\AbstractDb
     }
 
     /**
+     * {@inheritdoc}
+     * @return string
+     */
+    public function getMainTable()
+    {
+        $storeKey = $this->httpContext->getValue(StoreManagerInterface::CONTEXT_STORE);
+        $priceTableName = $this->priceTableResolver->resolve(
+            'catalog_product_index_price',
+            [
+                $this->dimensionFactory->create(
+                    WebsiteDimensionProvider::DIMENSION_NAME,
+                    (string)$this->storeManager->getStore($storeKey)->getWebsiteId()
+                ),
+                $this->dimensionFactory->create(
+                    CustomerGroupDimensionProvider::DIMENSION_NAME,
+                    (string)$this->httpContext->getValue(CustomerContext::CONTEXT_GROUP)
+                )
+            ]
+        );
+
+        return $this->getTable($priceTableName);
+    }
+
+    /**
      * Retrieve joined price index table alias
      *
      * @return string
@@ -390,13 +439,5 @@ class Price extends \Magento\Framework\Model\ResourceModel\Db\AbstractDb
     protected function _getIndexTableAlias()
     {
         return 'price_index';
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public function getMainTable()
-    {
-        return $this->indexerFrontendResource->getMainTable();
     }
 }

@@ -9,7 +9,8 @@
  */
 namespace Magento\CatalogWidget\Model\Rule\Condition;
 
-use Magento\Framework\App\ObjectManager;
+use Magento\Catalog\Api\Data\ProductInterface;
+use Magento\Catalog\Model\ProductCategoryList;
 
 /**
  * Class Product
@@ -35,11 +36,6 @@ class Product extends \Magento\Rule\Model\Condition\Product\AbstractProduct
     protected $storeManager;
 
     /**
-     * @var \Magento\Indexer\Model\ResourceModel\FrontendResource
-     */
-    private $frontendResource;
-
-    /**
      * @param \Magento\Rule\Model\Condition\Context $context
      * @param \Magento\Backend\Helper\Data $backendData
      * @param \Magento\Eav\Model\Config $config
@@ -49,8 +45,8 @@ class Product extends \Magento\Rule\Model\Condition\Product\AbstractProduct
      * @param \Magento\Eav\Model\ResourceModel\Entity\Attribute\Set\Collection $attrSetCollection
      * @param \Magento\Framework\Locale\FormatInterface $localeFormat
      * @param \Magento\Store\Model\StoreManagerInterface $storeManager
-     * @param \Magento\Indexer\Model\ResourceModel\FrontendResource|null $frontendResource
      * @param array $data
+     * @param ProductCategoryList $categoryList
      * @SuppressWarnings(PHPMD.ExcessiveParameterList)
      */
     public function __construct(
@@ -63,12 +59,10 @@ class Product extends \Magento\Rule\Model\Condition\Product\AbstractProduct
         \Magento\Eav\Model\ResourceModel\Entity\Attribute\Set\Collection $attrSetCollection,
         \Magento\Framework\Locale\FormatInterface $localeFormat,
         \Magento\Store\Model\StoreManagerInterface $storeManager,
-        \Magento\Indexer\Model\ResourceModel\FrontendResource $frontendResource = null,
-        array $data = []
+        array $data = [],
+        ProductCategoryList $categoryList = null
     ) {
         $this->storeManager = $storeManager;
-        $this->frontendResource = $frontendResource ?: ObjectManager::getInstance()
-            ->get(\Magento\Catalog\Model\ResourceModel\Product\Indexer\Eav\FrontendResource::class);
         parent::__construct(
             $context,
             $backendData,
@@ -78,7 +72,8 @@ class Product extends \Magento\Rule\Model\Condition\Product\AbstractProduct
             $productResource,
             $attrSetCollection,
             $localeFormat,
-            $data
+            $data,
+            $categoryList
         );
     }
 
@@ -88,12 +83,17 @@ class Product extends \Magento\Rule\Model\Condition\Product\AbstractProduct
     public function loadAttributeOptions()
     {
         $productAttributes = $this->_productResource->loadAllAttributes()->getAttributesByCode();
+        $productAttributes = array_filter(
+            $productAttributes,
+            function ($attribute) {
+                return $attribute->getFrontendLabel() &&
+                    $attribute->getFrontendInput() !== 'text' &&
+                    $attribute->getAttributeCode() !== ProductInterface::STATUS;
+            }
+        );
 
         $attributes = [];
         foreach ($productAttributes as $attribute) {
-            if (!$attribute->getFrontendLabel() || $attribute->getFrontendInput() == 'text') {
-                continue;
-            }
             $attributes[$attribute->getAttributeCode()] = $attribute->getFrontendLabel();
         }
 
@@ -124,7 +124,7 @@ class Product extends \Magento\Rule\Model\Condition\Product\AbstractProduct
     {
         $attribute = $this->getAttributeObject();
 
-        if ($collection->isEnabledFlat()) {
+        if ($attribute->getUsedInProductListing() && $collection->isEnabledFlat()) {
             $alias = array_keys($collection->getSelect()->getPart('from'))[0];
             $this->joinedAttributes[$attribute->getAttributeCode()] = $alias . '.' . $attribute->getAttributeCode();
             return $this;
@@ -168,7 +168,7 @@ class Product extends \Magento\Rule\Model\Condition\Product\AbstractProduct
             default:
                 $alias = 'at_' . md5($this->getId()) . $attribute->getAttributeCode();
                 $collection->getSelect()->join(
-                    [$alias => $this->frontendResource->getMainTable()],
+                    [$alias => $collection->getTable('catalog_product_index_eav')],
                     "($alias.entity_id = e.entity_id) AND ($alias.store_id = $storeId)" .
                     " AND ($alias.attribute_id = {$attribute->getId()})",
                     []
@@ -222,7 +222,7 @@ class Product extends \Magento\Rule\Model\Condition\Product\AbstractProduct
     public function getMappedSqlField()
     {
         $result = '';
-        if ($this->getAttribute() == 'category_ids') {
+        if (in_array($this->getAttribute(), ['category_ids', 'sku'])) {
             $result = parent::getMappedSqlField();
         } elseif (isset($this->joinedAttributes[$this->getAttribute()])) {
             $result = $this->joinedAttributes[$this->getAttribute()];

@@ -9,6 +9,12 @@ use Magento\Framework\App\ObjectManager;
 use Magento\Framework\App\Rss\DataProviderInterface;
 use Magento\Framework\Serialize\SerializerInterface;
 
+/**
+ * Provides functionality to work with RSS feeds
+ *
+ * @api
+ * @since 100.0.2
+ */
 class Rss
 {
     /**

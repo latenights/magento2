@@ -7,6 +7,9 @@ namespace Magento\Catalog\Model\Product\ProductList;
 
 /**
  * Class Toolbar
+ *
+ * @api
+ * @since 100.0.2
  */
 class Toolbar
 {
@@ -99,6 +102,6 @@ class Toolbar
     public function getCurrentPage()
     {
         $page = (int) $this->request->getParam(self::PAGE_PARM_NAME);
-        return $page ? $page : 1;
+        return $page ?: 1;
     }
 }

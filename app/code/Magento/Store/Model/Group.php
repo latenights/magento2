@@ -6,16 +6,15 @@
 
 /**
  * Store group model
- *
- * @method \Magento\Store\Model\ResourceModel\Group _getResource()
- * @method \Magento\Store\Model\ResourceModel\Group getResource()
  */
 namespace Magento\Store\Model;
 
 /**
  * Class Group
  *
+ * @api
  * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @since 100.0.2
  */
 class Group extends \Magento\Framework\Model\AbstractExtensibleModel implements
     \Magento\Framework\DataObject\IdentityInterface,
@@ -97,6 +96,11 @@ class Group extends \Magento\Framework\Model\AbstractExtensibleModel implements
     protected $_storeManager;
 
     /**
+     * @var \Magento\Framework\Event\ManagerInterface
+     */
+    private $eventManager;
+
+    /**
      * @param \Magento\Framework\Model\Context $context
      * @param \Magento\Framework\Registry $registry
      * @param \Magento\Framework\Api\ExtensionAttributesFactory $extensionFactory
@@ -107,6 +111,7 @@ class Group extends \Magento\Framework\Model\AbstractExtensibleModel implements
      * @param \Magento\Framework\Model\ResourceModel\AbstractResource $resource
      * @param \Magento\Framework\Data\Collection\AbstractDb $resourceCollection
      * @param array $data
+     * @param \Magento\Framework\Event\ManagerInterface|null $eventManager
      * @SuppressWarnings(PHPMD.ExcessiveParameterList)
      */
     public function __construct(
@@ -119,11 +124,14 @@ class Group extends \Magento\Framework\Model\AbstractExtensibleModel implements
         \Magento\Store\Model\StoreManagerInterface $storeManager,
         \Magento\Framework\Model\ResourceModel\AbstractResource $resource = null,
         \Magento\Framework\Data\Collection\AbstractDb $resourceCollection = null,
-        array $data = []
+        array $data = [],
+        \Magento\Framework\Event\ManagerInterface $eventManager = null
     ) {
         $this->_configDataResource = $configDataResource;
         $this->_storeListFactory = $storeListFactory;
         $this->_storeManager = $storeManager;
+        $this->eventManager = $eventManager ?: \Magento\Framework\App\ObjectManager::getInstance()
+            ->get(\Magento\Framework\Event\ManagerInterface::class);
         parent::__construct(
             $context,
             $registry,
@@ -402,9 +410,15 @@ class Group extends \Magento\Framework\Model\AbstractExtensibleModel implements
 
     /**
      * @inheritdoc
+     * @since 100.1.0
      */
     public function afterDelete()
     {
+        $group = $this;
+        $this->getResource()->addCommitCallback(function () use ($group) {
+            $this->_storeManager->reinitStores();
+            $this->eventManager->dispatch($this->_eventPrefix . '_delete', ['group' => $group]);
+        });
         $result = parent::afterDelete();
 
         if ($this->getId() === $this->getWebsite()->getDefaultGroupId()) {
@@ -419,6 +433,19 @@ class Group extends \Magento\Framework\Model\AbstractExtensibleModel implements
             $this->getWebsite()->save();
         }
         return $result;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function afterSave()
+    {
+        $group = $this;
+        $this->getResource()->addCommitCallback(function () use ($group) {
+            $this->_storeManager->reinitStores();
+            $this->eventManager->dispatch($this->_eventPrefix . '_save', ['group' => $group]);
+        });
+        return parent::afterSave();
     }
 
     /**
@@ -463,6 +490,7 @@ class Group extends \Magento\Framework\Model\AbstractExtensibleModel implements
 
     /**
      * @inheritdoc
+     * @since 100.1.0
      */
     public function getCode()
     {
@@ -471,6 +499,7 @@ class Group extends \Magento\Framework\Model\AbstractExtensibleModel implements
 
     /**
      * @inheritdoc
+     * @since 100.2.0
      */
     public function setCode($code)
     {
@@ -496,6 +525,7 @@ class Group extends \Magento\Framework\Model\AbstractExtensibleModel implements
 
     /**
      * {@inheritdoc}
+     * @since 100.1.0
      */
     public function getScopeType()
     {
@@ -504,6 +534,7 @@ class Group extends \Magento\Framework\Model\AbstractExtensibleModel implements
 
     /**
      * {@inheritdoc}
+     * @since 100.1.0
      */
     public function getScopeTypeName()
     {

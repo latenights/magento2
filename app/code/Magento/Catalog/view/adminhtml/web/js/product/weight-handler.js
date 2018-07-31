@@ -3,6 +3,9 @@
  * See COPYING.txt for license details.
  */
 
+/**
+ * @api
+ */
 define([
     'jquery'
 ], function ($) {
@@ -64,7 +67,7 @@ define([
         },
 
         /**
-         * Has weight swither
+         * Has weight switcher
          * @returns {*}
          */
         hasWeightSwither: function () {

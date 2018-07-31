@@ -19,7 +19,6 @@ use Magento\Framework\Config\Data\ConfigData;
 use Magento\Framework\Config\File\ConfigFilePool;
 use Magento\Framework\Exception\FileSystemException;
 use Magento\Framework\Filesystem;
-use Magento\Framework\Model\ResourceModel\Db\Context;
 use Magento\Framework\Module\ModuleList\Loader as ModuleLoader;
 use Magento\Framework\Module\ModuleListInterface;
 use Magento\Framework\Setup\FilePermissions;
@@ -174,11 +173,6 @@ class Installer
     private $objectManagerProvider;
 
     /**
-     * @var Context
-     */
-    private $context;
-
-    /**
      * @var SetupConfigModel
      */
     private $setupConfigModel;
@@ -239,7 +233,6 @@ class Installer
      * @param MaintenanceMode $maintenanceMode
      * @param Filesystem $filesystem
      * @param ObjectManagerProvider $objectManagerProvider
-     * @param Context $context
      * @param SetupConfigModel $setupConfigModel
      * @param CleanupFiles $cleanupFiles
      * @param DbValidator $dbValidator
@@ -264,7 +257,6 @@ class Installer
         MaintenanceMode $maintenanceMode,
         Filesystem $filesystem,
         ObjectManagerProvider $objectManagerProvider,
-        Context $context,
         SetupConfigModel $setupConfigModel,
         CleanupFiles $cleanupFiles,
         DbValidator $dbValidator,
@@ -287,7 +279,6 @@ class Installer
         $this->installInfo[self::INFO_MESSAGE] = [];
         $this->deploymentConfig = $deploymentConfig;
         $this->objectManagerProvider = $objectManagerProvider;
-        $this->context = $context;
         $this->setupConfigModel = $setupConfigModel;
         $this->cleanupFiles = $cleanupFiles;
         $this->dbValidator = $dbValidator;
@@ -337,7 +328,8 @@ class Installer
 
         $this->log->log('Starting Magento installation:');
 
-        while (list(, list($message, $method, $params)) = each($script)) {
+        foreach ($script as $item) {
+            list($message, $method, $params) = $item;
             $this->log->log($message);
             call_user_func_array([$this, $method], $params);
             $this->logProgress();
@@ -458,11 +450,9 @@ class Installer
      */
     public function checkInstallationFilePermissions()
     {
-        $results = $this->filePermissions->getMissingWritablePathsForInstallation();
-        if ($results) {
-            $errorMsg = "Missing write permissions to the following paths:" . PHP_EOL . implode(PHP_EOL, $results);
-            throw new \Exception($errorMsg);
-        }
+        $this->throwExceptionForNotWritablePaths(
+            $this->filePermissions->getMissingWritablePathsForInstallation()
+        );
     }
 
     /**
@@ -765,16 +755,24 @@ class Installer
      * Installs DB schema
      *
      * @return void
+     * @throws \Exception
      */
     public function installSchema()
     {
+        /** @var \Magento\Framework\Registry $registry */
+        $registry = $this->objectManagerProvider->get()->get(\Magento\Framework\Registry::class);
+        //For backward compatibility in install and upgrade scripts with enabled parallelization.
+        $registry->register('setup-mode-enabled', true);
+
         $this->assertDbConfigExists();
         $this->assertDbAccessible();
-        $setup = $this->setupFactory->create($this->context->getResources());
+        $setup = $this->setupFactory->create();
         $this->setupModuleRegistry($setup);
         $this->setupCoreTables($setup);
         $this->log->log('Schema creation/updates:');
         $this->handleDBSchemaData($setup, 'schema');
+
+        $registry->unregister('setup-mode-enabled');
     }
 
     /**
@@ -785,12 +783,47 @@ class Installer
      */
     public function installDataFixtures()
     {
+        /** @var \Magento\Framework\Registry $registry */
+        $registry = $this->objectManagerProvider->get()->get(\Magento\Framework\Registry::class);
+        //For backward compatibility in install and upgrade scripts with enabled parallelization.
+        $registry->register('setup-mode-enabled', true);
+
         $this->assertDbConfigExists();
         $this->assertDbAccessible();
         $setup = $this->dataSetupFactory->create();
-        $this->checkInstallationFilePermissions();
+        $this->checkFilePermissionsForDbUpgrade();
         $this->log->log('Data install/update:');
         $this->handleDBSchemaData($setup, 'data');
+
+        $registry->unregister('setup-mode-enabled');
+    }
+
+    /**
+     * Check permissions of directories that are expected to be writable for database upgrade
+     *
+     * @return void
+     * @throws \Exception If some of the required directories isn't writable
+     */
+    public function checkFilePermissionsForDbUpgrade()
+    {
+        $this->throwExceptionForNotWritablePaths(
+            $this->filePermissions->getMissingWritableDirectoriesForDbUpgrade()
+        );
+    }
+
+    /**
+     * Throws exception with appropriate message if given not empty array of paths that requires writing permission
+     *
+     * @param array $paths List of not writable paths
+     * @return void
+     * @throws \Exception If given not empty array of not writable paths
+     */
+    private function throwExceptionForNotWritablePaths(array $paths)
+    {
+        if ($paths) {
+            $errorMsg = "Missing write permissions to the following paths:" . PHP_EOL . implode(PHP_EOL, $paths);
+            throw new \Exception($errorMsg);
+        }
     }
 
     /**
@@ -809,7 +842,7 @@ class Installer
         if (!(($type === 'schema') || ($type === 'data'))) {
             throw  new \Magento\Setup\Exception("Unsupported operation type $type is requested");
         }
-        $resource = new \Magento\Framework\Module\ModuleResource($this->context);
+        $resource = $this->objectManagerProvider->get()->create(\Magento\Framework\Module\ModuleResource::class);
         $verType = $type . '-version';
         $installType = $type . '-install';
         $upgradeType = $type . '-upgrade';
@@ -941,7 +974,7 @@ class Installer
      */
     private function installOrderIncrementPrefix($orderIncrementPrefix)
     {
-        $setup = $this->setupFactory->create($this->context->getResources());
+        $setup = $this->setupFactory->create();
         $dbConnection = $setup->getConnection();
 
         // get entity_type_id for order
@@ -984,8 +1017,9 @@ class Installer
     public function installAdminUser($data)
     {
         $this->assertDbConfigExists();
-        $setup = $this->setupFactory->create($this->context->getResources());
-        $adminAccount = $this->adminAccountFactory->create($setup, (array)$data);
+        $data += ['db-prefix' => $this->deploymentConfig->get(ConfigOptionsListConstants::CONFIG_PATH_DB_PREFIX)];
+        $setup = $this->setupFactory->create();
+        $adminAccount = $this->adminAccountFactory->create($setup->getConnection(), (array)$data);
         $adminAccount->save();
     }
 
@@ -1271,7 +1305,7 @@ class Installer
 
         // unload Magento autoloader because it may be using compiled definition
         foreach (spl_autoload_functions() as $autoloader) {
-            if ($autoloader[0] instanceof \Magento\Framework\Code\Generator\Autoloader) {
+            if (is_array($autoloader) && $autoloader[0] instanceof \Magento\Framework\Code\Generator\Autoloader) {
                 spl_autoload_unregister([$autoloader[0], $autoloader[1]]);
                 break;
             }

@@ -51,28 +51,26 @@ class AttributeLoader implements AttributeLoaderInterface
      * Retrieve configuration for all attributes
      *
      * @param AbstractEntity $resource
-     * @param DataObject|null $object
+     * @param DataObject|null $entity
      * @return AbstractEntity
      * @throws LocalizedException
      */
-    public function loadAllAttributes(AbstractEntity $resource, DataObject $object = null)
+    public function loadAllAttributes(AbstractEntity $resource, DataObject $entity = null)
     {
-        $attributeCodes = $this->config->getEntityAttributeCodes($resource->getEntityType(), $object);
+        $attributes = $this->config->getEntityAttributes($resource->getEntityType(), $entity);
+        $attributeCodes = array_keys($attributes);
         /**
          * Check and init default attributes
          */
-        $defaultAttributes = $resource->getDefaultAttributes();
-        foreach ($defaultAttributes as $attributeCode) {
-            $attributeIndex = array_search($attributeCode, $attributeCodes);
-            if ($attributeIndex !== false) {
-                $resource->getAttribute($attributeCodes[$attributeIndex]);
-                unset($attributeCodes[$attributeIndex]);
-            } else {
-                $resource->addAttribute($this->_getDefaultAttribute($resource, $attributeCode));
-            }
+        $defaultAttributesCodes = array_diff($resource->getDefaultAttributes(), $attributeCodes);
+
+        $resource->unsetAttributes();
+
+        foreach ($defaultAttributesCodes as $attributeCode) {
+            $resource->addAttributeByScope($this->_getDefaultAttribute($resource, $attributeCode), $entity);
         }
-        foreach ($attributeCodes as $code) {
-            $resource->getAttribute($code);
+        foreach ($attributes as $attributeCode => $attribute) {
+            $resource->addAttributeByScope($attribute, $entity);
         }
         return $resource;
     }

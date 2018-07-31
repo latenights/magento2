@@ -52,6 +52,10 @@ class Create implements ProcessorInterface
     /**
      * The event manager.
      *
+     * @deprecated logic moved inside of "afterSave" method
+     *             \Magento\Store\Model\Website::afterSave
+     *             \Magento\Store\Model\Group::afterSave
+     *             \Magento\Store\Model\Store::afterSave
      * @var ManagerInterface
      */
     private $eventManager;
@@ -92,6 +96,10 @@ class Create implements ProcessorInterface
             ];
 
             foreach ($entities as $scope) {
+                if (!isset($data[$scope])) {
+                    continue;
+                }
+
                 $items = $this->dataDifferenceCalculator->getItemsToCreate($scope, $data[$scope]);
 
                 if (!$items) {
@@ -125,15 +133,20 @@ class Create implements ProcessorInterface
     private function createWebsites(array $items, array $data)
     {
         foreach ($items as $websiteData) {
-            unset($websiteData['website_id']);
+            $groupId = $websiteData['default_group_id'];
+
+            unset(
+                $websiteData['website_id'],
+                $websiteData['default_group_id']
+            );
 
             $website = $this->websiteFactory->create();
             $website->setData($websiteData);
             $website->getResource()->save($website);
 
-            $website->getResource()->addCommitCallback(function () use ($website, $data) {
+            $website->getResource()->addCommitCallback(function () use ($website, $data, $groupId) {
                 $website->setDefaultGroupId(
-                    $this->detectGroupById($data, $website->getDefaultGroupId())->getId()
+                    $this->detectGroupById($data, $groupId)->getId()
                 );
                 $website->getResource()->save($website);
             });
@@ -172,8 +185,6 @@ class Create implements ProcessorInterface
                 $group->setDefaultStoreId($store->getStoreId());
                 $group->setWebsite($website);
                 $group->getResource()->save($group);
-
-                $this->eventManager->dispatch('store_group_save', ['group' => $group]);
             });
         }
     }

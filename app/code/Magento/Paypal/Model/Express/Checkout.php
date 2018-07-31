@@ -7,12 +7,10 @@ namespace Magento\Paypal\Model\Express;
 
 use Magento\Customer\Api\Data\CustomerInterface as CustomerDataObject;
 use Magento\Customer\Model\AccountManagement;
-use Magento\Framework\App\ObjectManager;
 use Magento\Framework\DataObject;
 use Magento\Paypal\Model\Cart as PaypalCart;
 use Magento\Paypal\Model\Config as PaypalConfig;
 use Magento\Quote\Model\Quote\Address;
-use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Sales\Model\Order\Email\Sender\OrderSender;
 
 /**
@@ -269,11 +267,6 @@ class Checkout
      * @var \Magento\Quote\Model\Quote\TotalsCollector
      */
     protected $totalsCollector;
-
-    /**
-     * @var OrderRepositoryInterface
-     */
-    private $orderRepository;
 
     /**
      * @param \Psr\Log\LoggerInterface $logger
@@ -796,8 +789,7 @@ class Checkout
 
         $this->ignoreAddressValidation();
         $this->_quote->collectTotals();
-        $orderId = $this->quoteManagement->placeOrder($this->_quote->getId());
-        $order = $this->getOrderRepository()->get($orderId);
+        $order = $this->quoteManagement->submit($this->_quote);
 
         if (!$order) {
             return;
@@ -817,7 +809,9 @@ class Checkout
             case \Magento\Sales\Model\Order::STATE_PROCESSING:
             case \Magento\Sales\Model\Order::STATE_COMPLETE:
             case \Magento\Sales\Model\Order::STATE_PAYMENT_REVIEW:
-                $this->orderSender->send($order);
+                if (!$order->getEmailSent()) {
+                    $this->orderSender->send($order);
+                }
                 $this->_checkoutSession->start();
                 break;
             default:
@@ -905,7 +899,12 @@ class Checkout
     {
         // Exported data is more priority if we came from Express Checkout button
         $isButton = (bool)$this->_quote->getPayment()->getAdditionalInformation(self::PAYMENT_INFO_BUTTON);
-        if (!$isButton) {
+
+        // Since country is required field for billing and shipping address,
+        // we consider the address information to be empty if country is empty.
+        $isEmptyAddress = ($address->getCountryId() === null);
+
+        if (!$isButton && !$isEmptyAddress) {
             return;
         }
 
@@ -1148,21 +1147,5 @@ class Checkout
             ->setCustomerIsGuest(true)
             ->setCustomerGroupId(\Magento\Customer\Model\Group::NOT_LOGGED_IN_ID);
         return $this;
-    }
-
-    /**
-     * Returns order repository instance
-     *
-     * @return OrderRepositoryInterface
-     * @deprecated
-     */
-    private function getOrderRepository()
-    {
-        if ($this->orderRepository === null) {
-            $this->orderRepository = ObjectManager::getInstance()
-                ->get(OrderRepositoryInterface::class);
-        }
-
-        return $this->orderRepository;
     }
 }

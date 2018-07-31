@@ -149,6 +149,12 @@
         }
 
         &:extend(.abs-adjustment-incl-excl-tax all);
+
+        .action {
+            &.multicheckout {
+                color: @color-blue2;
+            }
+        }
     }
 
     //  Totals block
@@ -159,6 +165,10 @@
             .mark {
                 text-align: left;
             }
+        }
+
+        .discount.coupon {
+            display: none;
         }
     }
 

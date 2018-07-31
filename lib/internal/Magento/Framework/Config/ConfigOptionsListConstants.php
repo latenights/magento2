@@ -8,6 +8,7 @@ namespace Magento\Framework\Config;
 
 /**
  * Deployment configuration options constant storage
+ * @api
  */
 class ConfigOptionsListConstants
 {
@@ -36,6 +37,12 @@ class ConfigOptionsListConstants
     const CONFIG_PATH_DB_LOGGER_QUERY_TIME_THRESHOLD = 'db_logger/query_time_threshold';
     const CONFIG_PATH_DB_LOGGER_INCLUDE_STACKTRACE = 'db_logger/include_stacktrace';
     /**#@-*/
+
+    /**
+     * Parameter for disabling/enabling static content deployment on demand in production mode
+     * Can contains 0/1 value
+     */
+    const CONFIG_PATH_SCD_ON_DEMAND_IN_PRODUCTION = 'static_content_on_demand_in_production';
 
     /**#@+
      * Input keys for the options
@@ -81,6 +88,7 @@ class ConfigOptionsListConstants
      * Array keys for Database configuration
      */
     const KEY_HOST = 'host';
+    const KEY_PORT = 'port';
     const KEY_NAME = 'dbname';
     const KEY_USER = 'username';
     const KEY_PASSWORD = 'password';

@@ -31,9 +31,9 @@ abstract class AbstractSchemaGenerator
      */
     protected $customAttributeTypeLocator;
 
-     /**
-      * @var ServiceMetadata
-      */
+    /**
+     * @var ServiceMetadata
+     */
     protected $serviceMetadata;
 
     /**
@@ -75,22 +75,13 @@ abstract class AbstractSchemaGenerator
     }
 
     /**
-     * Retrieve a list of services visible to current user.
+     * Retrieve a list of all services.
      *
      * @return string[]
      */
     public function getListOfServices()
     {
-        $listOfAllowedServices = [];
-        foreach ($this->serviceMetadata->getServicesConfig() as $serviceName => $service) {
-            foreach ($service[ServiceMetadata::KEY_SERVICE_METHODS] as $method) {
-                if ($this->authorization->isAllowed($method[ServiceMetadata::KEY_ACL_RESOURCES])) {
-                    $listOfAllowedServices[] = $serviceName;
-                    break;
-                }
-            }
-        }
-        return $listOfAllowedServices;
+        return array_keys($this->serviceMetadata->getServicesConfig());
     }
 
     /**

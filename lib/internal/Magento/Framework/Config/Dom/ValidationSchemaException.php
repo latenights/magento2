@@ -11,6 +11,10 @@ namespace Magento\Framework\Config\Dom;
 
 use Magento\Framework\Exception\LocalizedException;
 
+/**
+ * @api
+ * @since 100.2.0
+ */
 class ValidationSchemaException extends LocalizedException
 {
 }

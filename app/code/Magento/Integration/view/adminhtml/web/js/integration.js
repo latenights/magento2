@@ -3,6 +3,11 @@
  * See COPYING.txt for license details.
  */
 
+/**
+ * jQuery plugin is added.
+ *
+ * @api
+ */
 define([
     'jquery',
     'Magento_Ui/js/modal/alert',
@@ -195,7 +200,7 @@ define([
                     if (IdentityLogin.win.closed ||
                         IdentityLogin.win.location.href == IdentityLogin.successCallbackUrl //eslint-disable-line eqeqeq
                     ) {
-                        //Stop the the polling
+                        //Stop the polling
                         clearInterval(IdentityLogin.checker);
                         $('body').trigger('processStart');
                         //Check for window closed

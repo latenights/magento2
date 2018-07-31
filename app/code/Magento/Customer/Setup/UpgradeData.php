@@ -155,6 +155,14 @@ class UpgradeData implements UpgradeDataInterface
             );
         }
 
+        if (version_compare($context->getVersion(), '2.0.12', '<')) {
+            $this->upgradeVersionTwoZeroTwelve($customerSetup);
+        }
+
+        if (version_compare($context->getVersion(), '2.0.13', '<')) {
+            $this->upgradeVersionTwoZeroThirteen($customerSetup);
+        }
+
         $indexer = $this->indexerRegistry->get(Customer::CUSTOMER_GRID_INDEXER_ID);
         $indexer->reindexAll();
         $this->eavConfig->clear();
@@ -164,7 +172,7 @@ class UpgradeData implements UpgradeDataInterface
     /**
      * Retrieve Store Manager
      *
-     * @deprecated
+     * @deprecated 100.1.3
      * @return StoreManagerInterface
      */
     private function getStoreManager()
@@ -179,7 +187,7 @@ class UpgradeData implements UpgradeDataInterface
     /**
      * Retrieve Allowed Countries Reader
      *
-     * @deprecated
+     * @deprecated 100.1.3
      * @return AllowedCountries
      */
     private function getAllowedCountriesReader()
@@ -637,6 +645,15 @@ class UpgradeData implements UpgradeDataInterface
     }
 
     /**
+     * @param CustomerSetup $customerSetup
+     * @return void
+     */
+    private function upgradeVersionTwoZeroTwelve(CustomerSetup $customerSetup)
+    {
+        $customerSetup->updateAttribute('customer_address', 'vat_id', 'frontend_label', 'VAT Number');
+    }
+
+    /**
      * @param ModuleDataSetupInterface $setup
      * @return void
      */
@@ -649,5 +666,37 @@ class UpgradeData implements UpgradeDataInterface
             ['value' => new \Zend_Db_Expr('value*24')],
             ['path = ?' => \Magento\Customer\Model\Customer::XML_PATH_CUSTOMER_RESET_PASSWORD_LINK_EXPIRATION_PERIOD]
         );
+    }
+
+    /**
+     * @param CustomerSetup $customerSetup
+     */
+    private function upgradeVersionTwoZeroThirteen(CustomerSetup $customerSetup)
+    {
+        $entityAttributes = [
+            'customer_address' => [
+                'firstname' => [
+                    'input_filter' => 'trim'
+                ],
+                'lastname' => [
+                    'input_filter' => 'trim'
+                ],
+                'middlename' => [
+                    'input_filter' => 'trim'
+                ],
+            ],
+            'customer' => [
+                'firstname' => [
+                    'input_filter' => 'trim'
+                ],
+                'lastname' => [
+                    'input_filter' => 'trim'
+                ],
+                'middlename' => [
+                    'input_filter' => 'trim'
+                ],
+            ],
+        ];
+        $this->upgradeAttributes($entityAttributes, $customerSetup);
     }
 }

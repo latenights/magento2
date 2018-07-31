@@ -160,14 +160,16 @@ class ProductsList extends \Magento\Catalog\Block\Product\AbstractProduct implem
 
         return [
             'CATALOG_PRODUCTS_LIST_WIDGET',
-            $this->getPriceCurrency()->getCurrencySymbol(),
+            $this->getPriceCurrency()->getCurrency()->getCode(),
             $this->_storeManager->getStore()->getId(),
             $this->_design->getDesignTheme()->getId(),
             $this->httpContext->getValue(\Magento\Customer\Model\Context::CONTEXT_GROUP),
             intval($this->getRequest()->getParam($this->getData('page_var_name'), 1)),
             $this->getProductsPerPage(),
             $conditions,
-            $this->json->serialize($this->getRequest()->getParams())
+            $this->json->serialize($this->getRequest()->getParams()),
+            $this->getTemplate(),
+            $this->getTitle()
         ];
     }
 
@@ -237,6 +239,12 @@ class ProductsList extends \Magento\Catalog\Block\Product\AbstractProduct implem
         $conditions->collectValidatedAttributes($collection);
         $this->sqlBuilder->attachConditionToCollection($collection, $conditions);
 
+        /**
+         * Prevent retrieval of duplicate records. This may occur when multiselect product attribute matches
+         * several allowed values from condition simultaneously
+         */
+        $collection->distinct(true);
+
         return $collection;
     }
 
@@ -251,6 +259,14 @@ class ProductsList extends \Magento\Catalog\Block\Product\AbstractProduct implem
 
         if ($conditions) {
             $conditions = $this->conditionsHelper->decode($conditions);
+        }
+
+        foreach ($conditions as $key => $condition) {
+            if (!empty($condition['attribute'])
+                && in_array($condition['attribute'], ['special_from_date', 'special_to_date'])
+            ) {
+                $conditions[$key]['value'] = date('Y-m-d H:i:s', strtotime($condition['value']));
+            }
         }
 
         $this->rule->loadPost(['conditions' => $conditions]);
@@ -372,7 +388,7 @@ class ProductsList extends \Magento\Catalog\Block\Product\AbstractProduct implem
     /**
      * @return PriceCurrencyInterface
      *
-     * @deprecated
+     * @deprecated 100.2.0
      */
     private function getPriceCurrency()
     {

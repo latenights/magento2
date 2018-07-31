@@ -7,29 +7,22 @@ namespace Magento\Config\Console\Command\ConfigSet;
 
 use Magento\Config\App\Config\Type\System;
 use Magento\Config\Console\Command\ConfigSetCommand;
-use Magento\Config\Model\Config;
-use Magento\Config\Model\ConfigFactory;
 use Magento\Framework\App\Config\ConfigPathResolver;
 use Magento\Framework\App\DeploymentConfig;
 use Magento\Framework\Exception\CouldNotSaveException;
-use Magento\Store\Model\ScopeInterface;
+use Magento\Config\Model\PreparedValueFactory;
+use Magento\Framework\App\Config\Value;
 
 /**
  * Processes default flow of config:set command.
  * This processor saves the value of configuration into database.
  *
  * {@inheritdoc}
+ * @api
+ * @since 100.2.0
  */
 class DefaultProcessor implements ConfigSetProcessorInterface
 {
-    /**
-     * The factory that creates config model instances.
-     *
-     * @see Config
-     * @var ConfigFactory
-     */
-    private $configFactory;
-
     /**
      * The deployment configuration reader.
      *
@@ -45,16 +38,23 @@ class DefaultProcessor implements ConfigSetProcessorInterface
     private $configPathResolver;
 
     /**
-     * @param ConfigFactory $configFactory The factory that creates config model instances
+     * The factory for prepared value.
+     *
+     * @var PreparedValueFactory
+     */
+    private $preparedValueFactory;
+
+    /**
+     * @param PreparedValueFactory $preparedValueFactory The factory for prepared value
      * @param DeploymentConfig $deploymentConfig The deployment configuration reader
      * @param ConfigPathResolver $configPathResolver The resolver for configuration paths according to source type
      */
     public function __construct(
-        ConfigFactory $configFactory,
+        PreparedValueFactory $preparedValueFactory,
         DeploymentConfig $deploymentConfig,
         ConfigPathResolver $configPathResolver
     ) {
-        $this->configFactory = $configFactory;
+        $this->preparedValueFactory = $preparedValueFactory;
         $this->deploymentConfig = $deploymentConfig;
         $this->configPathResolver = $configPathResolver;
     }
@@ -64,40 +64,26 @@ class DefaultProcessor implements ConfigSetProcessorInterface
      * Requires installed application.
      *
      * {@inheritdoc}
+     * @since 100.2.0
      */
     public function process($path, $value, $scope, $scopeCode)
     {
-        if (!$this->deploymentConfig->isAvailable()) {
-            throw new CouldNotSaveException(
-                __(
-                    'We can\'t save this option because Magento is not installed. '
-                    . 'To lock this value, enter the command again using the --%1 option.',
-                    ConfigSetCommand::OPTION_LOCK
-                )
-            );
-        }
-
         if ($this->isLocked($path, $scope, $scopeCode)) {
             throw new CouldNotSaveException(
                 __(
                     'The value you set has already been locked. To change the value, use the --%1 option.',
-                    ConfigSetCommand::OPTION_LOCK
+                    ConfigSetCommand::OPTION_LOCK_ENV
                 )
             );
         }
 
         try {
-            /** @var Config $config */
-            $config = $this->configFactory->create();
-            $config->setDataByPath($path, $value);
-
-            if (in_array($scope, [ScopeInterface::SCOPE_WEBSITE, ScopeInterface::SCOPE_WEBSITES])) {
-                $config->setWebsite($scopeCode);
-            } elseif (in_array($scope, [ScopeInterface::SCOPE_STORE, ScopeInterface::SCOPE_STORES])) {
-                $config->setStore($scopeCode);
+            /** @var Value $backendModel */
+            $backendModel = $this->preparedValueFactory->create($path, $value, $scope, $scopeCode);
+            if ($backendModel instanceof Value) {
+                $resourceModel = $backendModel->getResource();
+                $resourceModel->save($backendModel);
             }
-
-            $config->save();
         } catch (\Exception $exception) {
             throw new CouldNotSaveException(__('%1', $exception->getMessage()), $exception);
         }

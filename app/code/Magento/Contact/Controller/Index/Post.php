@@ -9,11 +9,12 @@ namespace Magento\Contact\Controller\Index;
 use Magento\Contact\Model\ConfigInterface;
 use Magento\Contact\Model\MailInterface;
 use Magento\Framework\App\Action\Context;
-use Magento\Framework\App\ObjectManager;
 use Magento\Framework\App\Request\DataPersistorInterface;
 use Magento\Framework\Controller\Result\Redirect;
 use Magento\Framework\Exception\LocalizedException;
-use Magento\Framework\HTTP\PhpEnvironment\Request;
+use Psr\Log\LoggerInterface;
+use Magento\Framework\App\ObjectManager;
+use Magento\Framework\DataObject;
 
 class Post extends \Magento\Contact\Controller\Index
 {
@@ -33,21 +34,29 @@ class Post extends \Magento\Contact\Controller\Index
     private $mail;
 
     /**
+     * @var LoggerInterface
+     */
+    private $logger;
+
+    /**
      * @param Context $context
      * @param ConfigInterface $contactsConfig
      * @param MailInterface $mail
      * @param DataPersistorInterface $dataPersistor
+     * @param LoggerInterface $logger
      */
     public function __construct(
         Context $context,
         ConfigInterface $contactsConfig,
         MailInterface $mail,
-        DataPersistorInterface $dataPersistor
+        DataPersistorInterface $dataPersistor,
+        LoggerInterface $logger = null
     ) {
         parent::__construct($context, $contactsConfig);
         $this->context = $context;
         $this->mail = $mail;
         $this->dataPersistor = $dataPersistor;
+        $this->logger = $logger ?: ObjectManager::getInstance()->get(LoggerInterface::class);
     }
 
     /**
@@ -57,40 +66,26 @@ class Post extends \Magento\Contact\Controller\Index
      */
     public function execute()
     {
-        if (!$this->isPostRequest()) {
+        if (!$this->getRequest()->isPost()) {
             return $this->resultRedirectFactory->create()->setPath('*/*/');
         }
         try {
             $this->sendEmail($this->validatedParams());
-            $this->messageManager->addSuccess(
+            $this->messageManager->addSuccessMessage(
                 __('Thanks for contacting us with your comments and questions. We\'ll respond to you very soon.')
             );
-            $this->getDataPersistor()->clear('contact_us');
+            $this->dataPersistor->clear('contact_us');
         } catch (LocalizedException $e) {
             $this->messageManager->addErrorMessage($e->getMessage());
-            $this->getDataPersistor()->set('contact_us', $this->getRequest()->getParams());
+            $this->dataPersistor->set('contact_us', $this->getRequest()->getParams());
         } catch (\Exception $e) {
+            $this->logger->critical($e);
             $this->messageManager->addErrorMessage(
-                __('We can\'t process your request right now. Sorry, that\'s all we know.')
+                __('An error occurred while processing your form. Please try again later.')
             );
-            $this->getDataPersistor()->set('contact_us', $this->getRequest()->getParams());
+            $this->dataPersistor->set('contact_us', $this->getRequest()->getParams());
         }
         return $this->resultRedirectFactory->create()->setPath('contact/index');
-    }
-
-    /**
-     * Get Data Persistor
-     *
-     * @return DataPersistorInterface
-     */
-    private function getDataPersistor()
-    {
-        if ($this->dataPersistor === null) {
-            $this->dataPersistor = ObjectManager::getInstance()
-                ->get(DataPersistorInterface::class);
-        }
-
-        return $this->dataPersistor;
     }
 
     /**
@@ -99,17 +94,10 @@ class Post extends \Magento\Contact\Controller\Index
      */
     private function sendEmail($post)
     {
-        $this->mail->send($post['email'], ['data' => new \Magento\Framework\DataObject($post)]);
-    }
-
-    /**
-     * @return bool
-     */
-    private function isPostRequest()
-    {
-        /** @var Request $request */
-        $request = $this->getRequest();
-        return !empty($request->getPostValue());
+        $this->mail->send(
+            $post['email'],
+            ['data' => new DataObject($post)]
+        );
     }
 
     /**

@@ -7,12 +7,15 @@ namespace Magento\Catalog\Model\ResourceModel;
 
 use Magento\Catalog\Model\ResourceModel\Product\Website\Link as ProductWebsiteLink;
 use Magento\Framework\App\ObjectManager;
+use Magento\Catalog\Model\Indexer\Category\Product\TableMaintainer;
 
 /**
  * Product entity resource model
  *
+ * @api
  * @SuppressWarnings(PHPMD.LongVariable)
  * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @since 100.0.2
  */
 class Product extends AbstractResource
 {
@@ -61,6 +64,7 @@ class Product extends AbstractResource
 
     /**
      * @var \Magento\Framework\EntityManager\EntityManager
+     * @since 101.0.0
      */
     protected $entityManager;
 
@@ -71,6 +75,7 @@ class Product extends AbstractResource
 
     /**
      * @var array
+     * @since 101.0.0
      */
     protected $availableCategoryIdsCache = [];
 
@@ -80,9 +85,9 @@ class Product extends AbstractResource
     private $productCategoryLink;
 
     /**
-     * @var \Magento\Indexer\Model\ResourceModel\FrontendResource|null
+     * @var TableMaintainer
      */
-    private $categoryProductIndexerFrontend;
+    private $tableMaintainer;
 
     /**
      * @param \Magento\Eav\Model\Entity\Context $context
@@ -95,7 +100,7 @@ class Product extends AbstractResource
      * @param \Magento\Eav\Model\Entity\TypeFactory $typeFactory
      * @param \Magento\Catalog\Model\Product\Attribute\DefaultAttributes $defaultAttributes
      * @param array $data
-     * @param \Magento\Indexer\Model\ResourceModel\FrontendResource|null $categoryProductIndexerFrontend
+     * @param TableMaintainer|null $tableMaintainer
      *
      * @SuppressWarnings(PHPMD.ExcessiveParameterList)
      */
@@ -110,7 +115,7 @@ class Product extends AbstractResource
         \Magento\Eav\Model\Entity\TypeFactory $typeFactory,
         \Magento\Catalog\Model\Product\Attribute\DefaultAttributes $defaultAttributes,
         $data = [],
-        \Magento\Indexer\Model\ResourceModel\FrontendResource $categoryProductIndexerFrontend = null
+        TableMaintainer $tableMaintainer = null
     ) {
         $this->_categoryCollectionFactory = $categoryCollectionFactory;
         $this->_catalogCategory = $catalogCategory;
@@ -125,10 +130,7 @@ class Product extends AbstractResource
             $data
         );
         $this->connectionName  = 'catalog';
-        //virtual type have to be injected here. If not, we'll do it :)
-        $this->categoryProductIndexerFrontend = $categoryProductIndexerFrontend ?: ObjectManager::getInstance()->get(
-            \Magento\Catalog\Model\ResourceModel\Product\Indexer\Category\Product\FrontendResource::class
-        );
+        $this->tableMaintainer = $tableMaintainer ?: ObjectManager::getInstance()->get(TableMaintainer::class);
     }
 
     /**
@@ -161,7 +163,7 @@ class Product extends AbstractResource
     /**
      * Product Category table name getter
      *
-     * @deprecated
+     * @deprecated 101.1.0
      * @return string
      */
     public function getProductCategoryTable()
@@ -185,7 +187,7 @@ class Product extends AbstractResource
     /**
      * Retrieve product website identifiers
      *
-     * @deprecated
+     * @deprecated 101.1.0
      * @param \Magento\Catalog\Model\Product|int $product
      * @return array
      */
@@ -302,7 +304,7 @@ class Product extends AbstractResource
     /**
      * Save product website relations
      *
-     * @deprecated
+     * @deprecated 101.1.0
      * @param \Magento\Catalog\Model\Product $product
      * @return $this
      */
@@ -331,7 +333,7 @@ class Product extends AbstractResource
      * @param \Magento\Framework\DataObject $object
      * @return $this
      * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-     * @deprecated
+     * @deprecated 101.1.0
      */
     protected function _saveCategories(\Magento\Framework\DataObject $object)
     {
@@ -373,20 +375,40 @@ class Product extends AbstractResource
         // fetching all parent IDs, including those are higher on the tree
         $entityId = (int)$object->getEntityId();
         if (!isset($this->availableCategoryIdsCache[$entityId])) {
-            $this->availableCategoryIdsCache[$entityId] = $this->getConnection()->fetchCol(
-                $this->getConnection()->select()->distinct()->from(
-                    $this->categoryProductIndexerFrontend->getMainTable(),
-                    ['category_id']
-                )->where(
-                    'product_id = ? AND is_parent = 1',
-                    $entityId
-                )->where(
-                    'visibility != ?',
-                    \Magento\Catalog\Model\Product\Visibility::VISIBILITY_NOT_VISIBLE
-                )
+            foreach ($this->_storeManager->getStores() as $store) {
+                $unionTables[] = $this->getAvailableInCategoriesSelect(
+                    $entityId,
+                    $this->tableMaintainer->getMainTable($store->getId())
+                );
+            }
+            $unionSelect = new \Magento\Framework\DB\Sql\UnionExpression(
+                $unionTables,
+                \Magento\Framework\DB\Select::SQL_UNION_ALL
             );
+            $this->availableCategoryIdsCache[$entityId] = array_unique($this->getConnection()->fetchCol($unionSelect));
         }
         return $this->availableCategoryIdsCache[$entityId];
+    }
+
+    /**
+     * Returns DB select for available categories.
+     *
+     * @param int $entityId
+     * @param string $tableName
+     * @return \Magento\Framework\DB\Select
+     */
+    private function getAvailableInCategoriesSelect($entityId, $tableName)
+    {
+        return $this->getConnection()->select()->distinct()->from(
+            $tableName,
+            ['category_id']
+        )->where(
+            'product_id = ? AND is_parent = 1',
+            $entityId
+        )->where(
+            'visibility != ?',
+            \Magento\Catalog\Model\Product\Visibility::VISIBILITY_NOT_VISIBLE
+        );
     }
 
     /**
@@ -409,7 +431,7 @@ class Product extends AbstractResource
     public function canBeShowInCategory($product, $categoryId)
     {
         $select = $this->getConnection()->select()->from(
-            $this->categoryProductIndexerFrontend->getMainTable(),
+            $this->tableMaintainer->getMainTable($product->getStoreId()),
             'product_id'
         )->where(
             'product_id = ?',
@@ -574,10 +596,20 @@ class Product extends AbstractResource
      * @param integer $entityId
      * @param array|null $attributes
      * @return $this
+     * @since 101.0.0
      */
     public function load($object, $entityId, $attributes = [])
     {
-        $this->loadAttributesMetadata($attributes);
+        $select = $this->_getLoadRowSelect($object, $entityId);
+        $row = $this->getConnection()->fetchRow($select);
+
+        if (is_array($row)) {
+            $object->addData($row);
+        } else {
+            $object->isObjectNew(true);
+        }
+
+        $this->loadAttributesForObject($attributes, $object);
         $this->getEntityManager()->load($object, $entityId);
         return $this;
     }
@@ -585,6 +617,7 @@ class Product extends AbstractResource
     /**
      * {@inheritdoc}
      * @SuppressWarnings(PHPMD.UnusedLocalVariable)
+     * @since 101.0.0
      */
     protected function evaluateDelete($object, $id, $connection)
     {
@@ -615,6 +648,7 @@ class Product extends AbstractResource
      * @param  \Magento\Framework\Model\AbstractModel $object
      * @return $this
      * @throws \Exception
+     * @since 101.0.0
      */
     public function save(\Magento\Framework\Model\AbstractModel $object)
     {
@@ -635,7 +669,7 @@ class Product extends AbstractResource
     }
 
     /**
-     * @deprecated
+     * @deprecated 101.1.0
      * @return ProductWebsiteLink
      */
     private function getProductWebsiteLink()
@@ -644,7 +678,7 @@ class Product extends AbstractResource
     }
 
     /**
-     * @deprecated
+     * @deprecated 101.1.0
      * @return \Magento\Catalog\Model\ResourceModel\Product\CategoryLink
      */
     private function getProductCategoryLink()
@@ -661,6 +695,7 @@ class Product extends AbstractResource
      * Store id is required to correctly identify attribute value we are working with.
      *
      * {@inheritdoc}
+     * @since 101.1.0
      */
     protected function getAttributeRow($entity, $object, $attribute)
     {

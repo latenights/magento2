@@ -10,7 +10,9 @@ namespace Magento\Setup\Fixtures\AttributeSet;
  */
 class Pattern
 {
-    /** @var array */
+    /**
+     * @var array
+     */
     private $attributePattern = [
         'is_required' => 1,
         'is_visible_on_front' => 1,
@@ -46,7 +48,7 @@ class Pattern
         for ($index = 1; $index <= $attributesPerSet; $index++) {
             $attributeData =  $this->generateAttribute(
                 $index,
-                $optionsPerAttribute
+                is_array($optionsPerAttribute) ? $optionsPerAttribute[$index-1] : $optionsPerAttribute
             );
             if (is_callable($attributePattern)) {
                 $attributeData = $attributePattern($index, $attributeData);

@@ -6,8 +6,6 @@
  * See COPYING.txt for license details.
  */
 
-// @codingStandardsIgnoreFile
-
 namespace Magento\Backend\App;
 
 use Magento\Config\App\Config\Type\System;
@@ -70,6 +68,6 @@ class Config implements ConfigInterface
         if ($path) {
             $configPath .= '/' . $path;
         }
-        return (bool) $this->appConfig->get(System::CONFIG_TYPE, $configPath);
+        return (bool)$this->appConfig->get(System::CONFIG_TYPE, $configPath);
     }
 }

@@ -7,14 +7,18 @@ namespace Magento\Ui\Component;
 
 use Magento\Framework\App\Filesystem\DirectoryList;
 use Magento\Framework\Component\ComponentFile;
+use Magento\Framework\Component\ComponentRegistrar;
 use Magento\Framework\Component\DirSearch;
+use Magento\Framework\Exception\FileSystemException;
 use Magento\Framework\Filesystem;
 use Magento\Framework\Filesystem\Directory\ReadInterface;
 use Magento\TestFramework\Helper\Bootstrap;
 use Magento\Ui\Config\Reader\DefinitionMap;
-use Magento\Framework\Component\ComponentRegistrar;
 
-class ConfigurationTest extends \PHPUnit_Framework_TestCase
+/**
+ * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ */
+class ConfigurationTest extends \PHPUnit\Framework\TestCase
 {
     /**
      * @var DirSearch
@@ -25,6 +29,11 @@ class ConfigurationTest extends \PHPUnit_Framework_TestCase
      * @var ReadInterface
      */
     private $appDir;
+
+    /**
+     * @var ReadInterface
+     */
+    private $rootDir;
 
     /**
      * @var \DOMDocument
@@ -53,9 +62,6 @@ class ConfigurationTest extends \PHPUnit_Framework_TestCase
         'argument[@name="data"]/item[@name="config"]/item[@name="multiple"]' => [
             '//*[@formElement="select"]',
             '//*[substring(@component, string-length(@component) - string-length("ui-group") +1) = "ui-group"]'
-        ],
-        'argument[@name="block"]' => [
-            '//*[@name="html_content"]'
         ]
     ];
 
@@ -70,6 +76,7 @@ class ConfigurationTest extends \PHPUnit_Framework_TestCase
         /** @var Filesystem $filesystem */
         $filesystem = $objectManager->create(Filesystem::class);
         $this->appDir = $filesystem->getDirectoryRead(DirectoryList::APP);
+        $this->rootDir = $filesystem->getDirectoryRead(DirectoryList::ROOT);
     }
 
     /**
@@ -87,7 +94,14 @@ class ConfigurationTest extends \PHPUnit_Framework_TestCase
         /** @var ComponentFile $file */
         foreach ($uiConfigurationFiles as $file) {
             $this->currentFile = $file;
-            $content = $this->appDir->readFile($this->appDir->getRelativePath($file->getFullPath()));
+            $fullPath = $file->getFullPath();
+            // by default search files in `app` directory but Magento can be installed via composer
+            // or some modules can be in `vendor` directory (like bundled extensions)
+            try {
+                $content = $this->appDir->readFile($this->appDir->getRelativePath($fullPath));
+            } catch (FileSystemException $e) {
+                $content = $this->rootDir->readFile($this->rootDir->getRelativePath($fullPath));
+            }
             $this->assertConfigurationSemantic($this->getDom($content), $result);
         }
         if (!empty($result)) {

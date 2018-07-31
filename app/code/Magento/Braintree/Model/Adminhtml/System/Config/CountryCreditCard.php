@@ -66,6 +66,13 @@ class CountryCreditCard extends Value
     public function beforeSave()
     {
         $value = $this->getValue();
+        if (!is_array($value)) {
+            try {
+                $value = $this->serializer->unserialize($value);
+            } catch (\InvalidArgumentException $e) {
+                $value = [];
+            }
+        }
         $result = [];
         foreach ($value as $data) {
             if (empty($data['country_id']) || empty($data['cc_types'])) {
@@ -89,10 +96,11 @@ class CountryCreditCard extends Value
      */
     public function afterLoad()
     {
-        $value = $this->serializer->unserialize($this->getValue());
-        if (is_array($value)) {
-            $value = $this->encodeArrayFieldValue($value);
-            $this->setValue($value);
+        if ($this->getValue()) {
+            $value = $this->serializer->unserialize($this->getValue());
+            if (is_array($value)) {
+                $this->setValue($this->encodeArrayFieldValue($value));
+            }
         }
         return $this;
     }

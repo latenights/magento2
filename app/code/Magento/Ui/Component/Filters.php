@@ -12,7 +12,8 @@ use Magento\Framework\View\Element\UiComponentInterface;
 use Magento\Ui\Component\Listing\Columns\ColumnInterface;
 
 /**
- * Class Filters
+ * @api
+ * @since 100.0.2
  */
 class Filters extends AbstractComponent implements ObserverInterface
 {
@@ -81,7 +82,7 @@ class Filters extends AbstractComponent implements ObserverInterface
                 return;
             }
 
-            if (isset($this->filterMap[$filterType])) {
+            if (isset($this->filterMap[$filterType]) && !isset($this->columnFilters[$component->getName()])) {
                 $filterComponent = $this->uiComponentFactory->create(
                     $component->getName(),
                     $this->filterMap[$filterType],

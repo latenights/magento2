@@ -20,6 +20,8 @@ use Magento\Store\Model\Store;
  * @author      Magento Core Team <core@magentocommerce.com>
  * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
  * @SuppressWarnings(PHPMD.TooManyFields)
+ * @api
+ * @since 100.0.2
  */
 abstract class AbstractTemplate extends AbstractModel implements TemplateTypesInterface
 {
@@ -532,10 +534,9 @@ abstract class AbstractTemplate extends AbstractModel implements TemplateTypesIn
      */
     public function setForcedArea($templateId)
     {
-        if ($this->area) {
-            throw new \LogicException(__('Area is already set'));
+        if (!isset($this->area)) {
+            $this->area = $this->emailConfig->getTemplateArea($templateId);
         }
-        $this->area = $this->emailConfig->getTemplateArea($templateId);
         return $this;
     }
 

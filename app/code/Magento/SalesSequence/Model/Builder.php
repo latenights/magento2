@@ -13,7 +13,10 @@ use Psr\Log\LoggerInterface as Logger;
 
 /**
  * Class Builder
+ *
+ * @api
  * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @since 100.0.2
  */
 class Builder
 {

@@ -31,6 +31,7 @@
             </storageConfig>
             <updateUrl path="mui/index/render"/>
         </settings>
+        <aclResource>Magento_Cms::block</aclResource>
         <dataProvider class="Magento\Cms\Ui\Component\DataProvider" name="cms_block_listing_data_source">
             <settings>
                 <requestFieldName>id</requestFieldName>
@@ -72,7 +73,7 @@
             <action name="delete">
                 <settings>
                     <confirm>
-                        <message translate="true">Are you sure you wan't to delete selected items?</message>
+                        <message translate="true">Are you sure you want to delete selected items?</message>
                         <title translate="true">Delete items</title>
                     </confirm>
                     <url path="cms/block/massDelete"/>

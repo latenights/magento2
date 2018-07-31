@@ -3,17 +3,18 @@
  * Copyright © Magento, Inc. All rights reserved.
  * See COPYING.txt for license details.
  */
+
 namespace Magento\ConfigurableProduct\Model\Product\Type;
 
 use Magento\Catalog\Api\Data\ProductAttributeInterface;
 use Magento\Catalog\Api\Data\ProductInterface;
 use Magento\Catalog\Api\Data\ProductInterfaceFactory;
 use Magento\Catalog\Api\ProductRepositoryInterface;
-use Magento\ConfigurableProduct\Model\Product\Type\Collection\SalableProcessor;
 use Magento\Catalog\Model\Config;
+use Magento\Catalog\Model\Product\Gallery\ReadHandler as GalleryReadHandler;
+use Magento\ConfigurableProduct\Model\Product\Type\Collection\SalableProcessor;
 use Magento\Framework\App\ObjectManager;
 use Magento\Framework\EntityManager\MetadataPool;
-use Magento\Catalog\Model\Product\Gallery\ReadHandler as GalleryReadHandler;
 
 /**
  * Configurable product type implementation
@@ -23,6 +24,8 @@ use Magento\Catalog\Model\Product\Gallery\ReadHandler as GalleryReadHandler;
  * @SuppressWarnings(PHPMD.TooManyFields)
  * @SuppressWarnings(PHPMD.ExcessiveClassComplexity)
  * @SuppressWarnings(PHPMD.CouplingBetweenObjects)
+ * @api
+ * @since 100.0.2
  */
 class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
 {
@@ -35,6 +38,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
      * Cache key for Used Product Attribute Ids
      *
      * @var string
+     * @since 100.1.0
      */
     protected $usedProductAttributeIds = '_cache_instance_used_product_attribute_ids';
 
@@ -42,6 +46,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
      * Cache key for Used Product Attributes
      *
      * @var string
+     * @since 100.1.0
      */
     protected $usedProductAttributes = '_cache_instance_used_product_attributes';
 
@@ -125,6 +130,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
      * Configurable attribute factory
      *
      * @var \Magento\ConfigurableProduct\Model\Product\Type\Configurable\AttributeFactory
+     * @since 100.1.0
      */
     protected $configurableAttributeFactory;
 
@@ -139,6 +145,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
      * Type configurable factory
      *
      * @var \Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\ConfigurableFactory
+     * @since 100.1.0
      */
     protected $typeConfigurableFactory;
 
@@ -260,11 +267,10 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
             $productRepository,
             $serializer
         );
-
     }
 
     /**
-     * @deprecated
+     * @deprecated 100.1.1
      * @return \Magento\Framework\Cache\FrontendInterface
      */
     private function getCache()
@@ -276,7 +282,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
     }
 
     /**
-     * @deprecated
+     * @deprecated 100.1.1
      * @return \Magento\Customer\Model\Session
      */
     private function getCustomerSession()
@@ -351,7 +357,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
      * @param   array $ids
      * @param   \Magento\Catalog\Model\Product $product
      * @return  \Magento\ConfigurableProduct\Model\Product\Type\Configurable
-     * @deprecated use \Magento\ConfigurableProduct\Model\Product\Type\Configurable::setUsedProductAttributes instead
+     * @deprecated 100.1.0 use \Magento\ConfigurableProduct\Model\Product\Type\Configurable::setUsedProductAttributes instead
      */
     public function setUsedProductAttributeIds($ids, $product)
     {
@@ -377,6 +383,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
      * @param ProductInterface $product
      * @param array $ids
      * @return $this
+     * @since 100.0.6
      */
     public function setUsedProductAttributes(ProductInterface $product, array $ids)
     {
@@ -446,6 +453,10 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
             ['group' => 'CONFIGURABLE', 'method' => __METHOD__]
         );
         if (!$product->hasData($this->_configurableAttributes)) {
+            // for new product do not load configurable attributes
+            if (!$product->getId()) {
+                return [];
+            }
             $configurableAttributes = $this->getConfigurableAttributeCollection($product);
             $this->extensionAttributesJoinProcessor->process($configurableAttributes);
             $configurableAttributes->orderByPosition()->load();
@@ -514,7 +525,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
     /**
      * Retrieve subproducts identifiers
      *
-     * @deprecated
+     * @deprecated 100.1.1
      * @param  \Magento\Catalog\Model\Product $product
      * @return array
      */
@@ -534,7 +545,8 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
      * Retrieve GalleryReadHandler
      *
      * @return GalleryReadHandler
-     * @deprecated
+     * @deprecated 100.1.1
+     * @since 100.1.0
      */
     protected function getGalleryReadHandler()
     {
@@ -608,7 +620,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
      * @param \Magento\Catalog\Model\Product $product
      * @return $this
      * @throws \InvalidArgumentException
-     * @deprecated the \Magento\ConfigurableProduct\Model\Product\SaveHandler::execute should be used instead
+     * @deprecated 100.1.0 the \Magento\ConfigurableProduct\Model\Product\SaveHandler::execute should be used instead
      */
     public function save($product)
     {
@@ -636,7 +648,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
      * @param ProductInterface $product
      * @return void
      * @throws \Exception
-     * @deprecated
+     * @deprecated 100.1.0
      */
     private function saveConfigurableOptions(ProductInterface $product)
     {
@@ -674,7 +686,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
                 ->setProductId($product->getData($metadata->getLinkField()))
                 ->save();
         }
-        /** @var $configurableAttributesCollection \Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\Configurable\Attribute\Collection  */
+        /** @var $configurableAttributesCollection \Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\Configurable\Attribute\Collection */
         $configurableAttributesCollection = $this->_attributeCollectionFactory->create();
         $configurableAttributesCollection->setProductFilter($product);
         $configurableAttributesCollection->addFieldToFilter(
@@ -689,7 +701,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
      *
      * @param ProductInterface $product
      * @return void
-     * @deprecated
+     * @deprecated 100.1.0
      */
     private function saveRelatedProducts(ProductInterface $product)
     {
@@ -789,7 +801,11 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
             ['group' => 'CONFIGURABLE', 'method' => __METHOD__]
         );
         if ($attributesOption = $product->getCustomOption('attributes')) {
-            $data = $this->serializer->unserialize($attributesOption->getValue());
+            $data = $attributesOption->getValue();
+            if (!$data) {
+                return $attributes;
+            }
+            $data = $this->serializer->unserialize($data);
             $this->getUsedProductAttributeIds($product);
 
             $usedAttributes = $product->getData($this->_usedAttributes);
@@ -1184,7 +1200,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
     /**
      * Get Config instance
      * @return Config
-     * @deprecated
+     * @deprecated 100.1.0
      */
     private function getCatalogConfig()
     {
@@ -1196,6 +1212,7 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
 
     /**
      * @inheritdoc
+     * @since 100.2.0
      */
     public function isPossibleBuyFromList($product)
     {
@@ -1237,12 +1254,13 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
      *
      * Result array contains only those children for specified configurable product which are salable on store front
      *
-     * @deprecated Not used anymore. Keep it for backward compatibility.
+     * @deprecated 100.2.0 Not used anymore. Keep it for backward compatibility.
      *
      * @param \Magento\Catalog\Model\Product $product
      * @param array|null $requiredAttributeIds
      * @return ProductInterface[]
      * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     * @since 100.1.3
      */
     public function getSalableUsedProducts(\Magento\Catalog\Model\Product $product, $requiredAttributeIds = null)
     {
@@ -1262,6 +1280,8 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
      * Load collection on sub-products for specified configurable product
      *
      * Load collection of sub-products, apply result to specified configurable product and store result to cache
+     * Please note $salableOnly parameter is used for backwards compatibility because of deprecated method
+     * getSalableUsedProducts
      * Number of loaded sub-products depends on $salableOnly parameter
      * $salableOnly = true - result array contains only salable sub-products
      * $salableOnly = false - result array contains all sub-products
@@ -1278,11 +1298,11 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
         if (!$product->hasData($dataFieldName)) {
             $usedProducts = $this->readUsedProductsCacheData($cacheKey);
             if ($usedProducts === null) {
-                $collection = $this->getConfiguredUsedProductCollection($product);
+                $collection = $this->getConfiguredUsedProductCollection($product, false);
                 if ($salableOnly) {
                     $collection = $this->salableProcessor->process($collection);
                 }
-                $usedProducts = $collection->getItems();
+                $usedProducts = array_values($collection->getItems());
                 $this->saveUsedProductsCacheData($product, $usedProducts, $cacheKey);
             }
             $product->setData($dataFieldName, $usedProducts);
@@ -1303,7 +1323,11 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
     private function readUsedProductsCacheData($cacheKey)
     {
         $usedProducts = null;
-        $data = $this->serializer->unserialize($this->getCache()->load($cacheKey));
+        $data = $this->getCache()->load($cacheKey);
+        if (!$data) {
+            return $usedProducts;
+        }
+        $data = $this->serializer->unserialize($data);
         if (!empty($data)) {
             $usedProducts = [];
             foreach ($data as $item) {
@@ -1368,26 +1392,55 @@ class Configurable extends \Magento\Catalog\Model\Product\Type\AbstractType
      * Retrieve related products collection with additional configuration
      *
      * @param \Magento\Catalog\Model\Product $product
+     * @param bool $skipStockFilter
      * @return \Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\Configurable\Product\Collection
      */
-    private function getConfiguredUsedProductCollection(\Magento\Catalog\Model\Product $product)
-    {
+    private function getConfiguredUsedProductCollection(
+        \Magento\Catalog\Model\Product $product,
+        $skipStockFilter = true
+    ) {
         $collection = $this->getUsedProductCollection($product);
+
+        if ($skipStockFilter) {
+            $collection->setFlag('has_stock_status_filter', true);
+        }
+
         $collection
-            ->setFlag('has_stock_status_filter', true)
-            ->addAttributeToSelect($this->getCatalogConfig()->getProductAttributes())
+            ->addAttributeToSelect($this->getAttributesForCollection($product))
             ->addFilterByRequiredOptions()
             ->setStoreId($product->getStoreId());
 
-        $requiredAttributes = ['name', 'price', 'weight', 'image', 'thumbnail', 'status', 'media_gallery'];
-        foreach ($requiredAttributes as $attributeCode) {
-            $collection->addAttributeToSelect($attributeCode);
-        }
-        foreach ($this->getUsedProductAttributes($product) as $usedProductAttribute) {
-            $collection->addAttributeToSelect($usedProductAttribute->getAttributeCode());
-        }
         $collection->addMediaGalleryData();
         $collection->addTierPriceData();
+
         return $collection;
+    }
+
+    /**
+     * @return array
+     */
+    private function getAttributesForCollection(\Magento\Catalog\Model\Product $product)
+    {
+        $productAttributes = $this->getCatalogConfig()->getProductAttributes();
+
+        $requiredAttributes = [
+            'name',
+            'price',
+            'weight',
+            'image',
+            'thumbnail',
+            'status',
+            'visibility',
+            'media_gallery'
+        ];
+
+        $usedAttributes = array_map(
+            function($attr) {
+                return $attr->getAttributeCode();
+            },
+            $this->getUsedProductAttributes($product)
+        );
+
+        return array_unique(array_merge($productAttributes, $requiredAttributes, $usedAttributes));
     }
 }

@@ -9,6 +9,10 @@
  */
 namespace Magento\Wishlist\Block\Rss;
 
+/**
+ * @api
+ * @since 100.0.2
+ */
 class Link extends \Magento\Framework\View\Element\Template
 {
     /**
@@ -68,7 +72,7 @@ class Link extends \Magento\Framework\View\Element\Template
     }
 
     /**
-     * @return string
+     * @return array
      */
     protected function getLinkParams()
     {
