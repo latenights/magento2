@@ -25,14 +25,14 @@
         <!-- Select First Simple -->
         <click selector="{{AdminProductGridFilterSection.filters}}" stepKey="clickOnFiltersButton"/>
         <conditionalClick selector="{{AdminProductGridFilterSection.clearAll}}" dependentSelector="{{AdminProductGridFilterSection.clearAll}}" visible="true" stepKey="clearFilters"/>
-        <fillField selector="{{AdminProductGridFilterSection.name}}" userInput="{{simpleProductFirst.name}}" stepKey="fillNameFilter"/>
+        <fillField selector="{{AdminProductGridFilterSection.nameFilter}}" userInput="{{simpleProductFirst.name}}" stepKey="fillNameFilter"/>
         <click selector="{{AdminProductGridFilterSection.applyFilters}}" stepKey="applyFilters"/>
         <click selector="{{AdminProductFormBundleSection.firstRowCheckbox}}" stepKey="selectFirstSimple"/>
 
         <!-- Select Second Simple -->
         <click selector="{{AdminProductGridFilterSection.filters}}" stepKey="clickOnFiltersButton2"/>
         <conditionalClick selector="{{AdminProductGridFilterSection.clearAll}}" dependentSelector="{{AdminProductGridFilterSection.clearAll}}" visible="true" stepKey="clearFilters2"/>
-        <fillField selector="{{AdminProductGridFilterSection.name}}" userInput="{{simpleProductSecond.name}}" stepKey="fillNameFilter2"/>
+        <fillField selector="{{AdminProductGridFilterSection.nameFilter}}" userInput="{{simpleProductSecond.name}}" stepKey="fillNameFilter2"/>
         <click selector="{{AdminProductGridFilterSection.applyFilters}}" stepKey="applyFilters2"/>
         <click selector="{{AdminProductFormBundleSection.firstRowCheckbox}}" stepKey="selectSecondSimple"/>
 
@@ -46,5 +46,19 @@
         <amOnPage url="{{AdminProductIndexPage.url}}" stepKey="openProductsGridPage"/>
         <click selector="{{AdminProductGridActionSection.addProductToggle}}" stepKey="clickAddProductDropdown"/>
         <click selector="{{AdminProductGridActionSection.addBundleProduct}}" stepKey="goToNewBundleProductPage"/>
+    </actionGroup>
+
+    <actionGroup name="CreateBundleProductForTwoSimpleProductsWithRadioTypeOptions" extends="CreateBundleProductForTwoSimpleProducts">
+        <selectOption selector="{{AdminProductFormBundleSection.bundleOptionXInputType('0')}}" userInput="Radio Buttons" after="fillOptionTitle" stepKey="selectInputType"/>
+    </actionGroup>
+
+    <actionGroup name="CreateBundleProductForOneSimpleProductsWithRadioTypeOption" extends="CreateBundleProductForTwoSimpleProducts">
+        <remove keyForRemoval="clickOnFiltersButton2"/>
+        <remove keyForRemoval="clearFilters2"/>
+        <remove keyForRemoval="fillNameFilter2"/>
+        <remove keyForRemoval="applyFilters2"/>
+        <remove keyForRemoval="selectSecondSimple"/>
+        <remove keyForRemoval="fillDefaultQuantityForSecondProduct"/>
+        <selectOption selector="{{AdminProductFormBundleSection.bundleOptionXInputType('0')}}" userInput="Radio Buttons" after="fillOptionTitle" stepKey="selectInputType"/>
     </actionGroup>
 </actionGroups>
